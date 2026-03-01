@@ -2,6 +2,15 @@ import { appConfig } from './config';
 import { DexScreenerClient } from './dexscreener';
 import { BucketType, DexPair, DiscoveryHint, LiveCoin, UniverseSnapshot } from './types';
 
+const BLOCKED_TOKEN_MARKERS = ['hitler', 'not wrong just early'];
+
+function normalizeTokenText(value: unknown): string {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 type ScoredCandidate = Omit<LiveCoin, 'bucket' | 'rank'>;
 
 function clamp(value: number, min = 0, max = Number.POSITIVE_INFINITY) {
@@ -101,10 +110,39 @@ export class UniverseManager {
     this.discoveryHints.set(tokenAddress, next);
   }
 
+  private isBlockedPair(pair: DexPair) {
+    const searchableText = [
+      pair.baseToken?.name,
+      pair.baseToken?.symbol,
+      pair.url,
+    ]
+      .map((value) => normalizeTokenText(value))
+      .filter(Boolean)
+      .join(' ');
+
+    return BLOCKED_TOKEN_MARKERS.some((marker) => searchableText.includes(marker));
+  }
+
+  private purgeBlockedTrackedCoins() {
+    for (const [tokenAddress, coin] of this.tracked.entries()) {
+      const searchableText = [coin.name, coin.symbol, coin.url]
+        .map((value) => normalizeTokenText(value))
+        .filter(Boolean)
+        .join(' ');
+
+      if (BLOCKED_TOKEN_MARKERS.some((marker) => searchableText.includes(marker))) {
+        this.tracked.delete(tokenAddress);
+        this.weakCycles.delete(tokenAddress);
+      }
+    }
+  }
+
   private chooseCanonicalPairs(pairs: DexPair[]): DexPair[] {
     const byToken = new Map<string, DexPair>();
 
     for (const pair of pairs) {
+      if (this.isBlockedPair(pair)) continue;
+
       const tokenAddress = pair.baseToken?.address;
       if (!tokenAddress) continue;
 
@@ -298,6 +336,8 @@ export class UniverseManager {
   }
 
   async refreshTrackedUniverse() {
+    this.purgeBlockedTrackedCoins();
+
     const trackedAddresses = Array.from(this.tracked.keys());
     if (trackedAddresses.length === 0) {
       this.snapshot = this.buildSnapshot(this.candidatePool.length ? 'live' : 'warming_up');
@@ -438,6 +478,8 @@ export class UniverseManager {
   }
 
   private rebalanceUniverse(force: boolean) {
+    this.purgeBlockedTrackedCoins();
+
     const now = Date.now();
     if (!force && now - this.lastRebalancedAt < appConfig.rebalanceMs) {
       return;
