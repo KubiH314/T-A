@@ -1,0 +1,26 @@
+[
+  {
+    "coinId": "FjRVgPYUjvwkfEnjL6QBBWfcVVLeZDKBnxsxWBTrpump",
+    "symbol": "ARMY",
+    "name": "ARMY GANG ",
+    "contractAddress": "FjRVgPYUjvwkfEnjL6QBBWfcVVLeZDKBnxsxWBTrpump"
+  },
+  {
+    "coinId": "FfjLgazvJBApdq6Tyn2pRvZUkPqhtp4VyeVEJENypump",
+    "symbol": "WARBROS",
+    "name": "WARBROS",
+    "contractAddress": "FfjLgazvJBApdq6Tyn2pRvZUkPqhtp4VyeVEJENypump"
+  },
+  {
+    "coinId": "atVjZ7uM8sVrLFi5Xe1JiLGW6mW9pvQdTCWzhNFpump",
+    "symbol": "Peace ",
+    "name": "World Peace ",
+    "contractAddress": "atVjZ7uM8sVrLFi5Xe1JiLGW6mW9pvQdTCWzhNFpump"
+  },
+  {
+    "coinId": "BzyKa1FGjs2EUpu3GGDibY4xdygn5evAiRboKmETpump",
+    "symbol": "TRENCH",
+    "name": "Trenches Game",
+    "contractAddress": "BzyKa1FGjs2EUpu3GGDibY4xdygn5evAiRboKmETpump"
+  }
+]
