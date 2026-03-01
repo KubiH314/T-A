@@ -2,7 +2,7 @@ import { appConfig } from './config';
 import { DexScreenerClient } from './dexscreener';
 import { BucketType, DexPair, DiscoveryHint, LiveCoin, UniverseSnapshot } from './types';
 
-const BLOCKED_TOKEN_MARKERS = ['hitler', 'Not wrong, Just early'];
+const BLOCKED_TOKEN_MARKERS = ['Hitler', 'Not wrong, Just early'];
 
 function normalizeTokenText(value: unknown): string {
   return String(value || '')
