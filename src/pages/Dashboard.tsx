@@ -601,12 +601,11 @@ export function Dashboard() {
             <div className="space-y-2">
               <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300">
                 <Activity className="h-3.5 w-3.5" />
-                Live DexScreener Universe
+                Live Meme Coin Watchlist
               </div>
-              <h1 className="text-3xl font-semibold tracking-tight">MemePulse v2</h1>
+              <h1 className="text-3xl font-semibold tracking-tight">MemePulse v1</h1>
               <p className="max-w-3xl text-sm text-neutral-300">
-                DexScreener sync now auto-recovers with retry backoff, PUBLICITY is pinned to the backend
-                Publicity_Score field, and the detail chart stays aligned with the live dashboard state.
+                Be on top of the public reactions and harness the power of social media for investment decisions.
               </p>
             </div>
 
