@@ -1,0 +1,2 @@
+# No third-party Python packages are required for the YouTube scanner.
+# The worker uses urllib from the Python standard library.

@@ -1,0 +1,154 @@
+diff -ru /mnt/data/basecompare/MemeCoin-Google-AI-main/.env.example /mnt/data/workrepo/MemeCoin-Google-AI-main/.env.example
+--- /mnt/data/basecompare/MemeCoin-Google-AI-main/.env.example	2026-02-28 17:07:18.000000000 +0000
++++ /mnt/data/workrepo/MemeCoin-Google-AI-main/.env.example	2026-02-28 18:32:50.096505840 +0000
+@@ -30,3 +30,16 @@
+ DEX_MAX_FRESH_AGE_HOURS="24"
+ DEX_SEARCH_TERMS="pump,moon,meme,ai,cat,dog,sol"
+ DEX_REQUEST_TIMEOUT_MS="8000"
++
++# Reddit scraper
++REDDIT_SCRAPER_ENABLED="true"
++REDDIT_SCRAPE_MS="300000"
++REDDIT_SCRAPE_TIMEOUT_MS="120000"
++REDDIT_SEARCH_LIMIT="25"
++REDDIT_SUBREDDITS="all"
++REDDIT_CLIENT_ID=""
++REDDIT_CLIENT_SECRET=""
++REDDIT_USER_AGENT="memepulse-reddit-scanner/1.0 by u/your_reddit_username"
++PYTHON_BIN="python3"
++REDDIT_DB_PATH="server/data/reddit-publicity.sqlite"
++REDDIT_MANIFEST_PATH="server/data/tracked-coins.json"
+diff -ru /mnt/data/basecompare/MemeCoin-Google-AI-main/.gitignore /mnt/data/workrepo/MemeCoin-Google-AI-main/.gitignore
+--- /mnt/data/basecompare/MemeCoin-Google-AI-main/.gitignore	2026-02-28 17:07:18.000000000 +0000
++++ /mnt/data/workrepo/MemeCoin-Google-AI-main/.gitignore	2026-02-28 18:32:50.096377665 +0000
+@@ -7,3 +7,6 @@
+ .env*
+ !.env.example
+ .env
++server/data/*.sqlite
++server/data/*.sqlite-*
++server/data/tracked-coins.json
+Only in /mnt/data/workrepo/MemeCoin-Google-AI-main: BACKEND_README.md
+diff -ru /mnt/data/basecompare/MemeCoin-Google-AI-main/package.json /mnt/data/workrepo/MemeCoin-Google-AI-main/package.json
+--- /mnt/data/basecompare/MemeCoin-Google-AI-main/package.json	2026-02-28 17:07:18.000000000 +0000
++++ /mnt/data/workrepo/MemeCoin-Google-AI-main/package.json	2026-02-28 18:32:50.096238715 +0000
+@@ -10,7 +10,8 @@
+     "build": "vite build",
+     "preview": "vite preview",
+     "clean": "rm -rf dist",
+-    "lint": "tsc --noEmit"
++    "lint": "tsc --noEmit",
++    "scrape:reddit": "python3 server/reddit_scraper.py"
+   },
+   "dependencies": {
+     "@google/genai": "^1.29.0",
+Only in /mnt/data/workrepo/MemeCoin-Google-AI-main: requirements.txt
+Only in /mnt/data/workrepo/MemeCoin-Google-AI-main/server: __pycache__
+diff -ru /mnt/data/basecompare/MemeCoin-Google-AI-main/server/config.ts /mnt/data/workrepo/MemeCoin-Google-AI-main/server/config.ts
+--- /mnt/data/basecompare/MemeCoin-Google-AI-main/server/config.ts	2026-02-28 17:07:18.000000000 +0000
++++ /mnt/data/workrepo/MemeCoin-Google-AI-main/server/config.ts	2026-02-28 18:32:50.096656422 +0000
+@@ -1,5 +1,14 @@
+ import 'dotenv/config';
+ 
++function envBoolean(name: string, fallback: boolean): boolean {
++  const raw = process.env[name];
++  if (!raw) return fallback;
++  const normalized = raw.trim().toLowerCase();
++  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
++  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
++  return fallback;
++}
++
+ function envNumber(name: string, fallback: number): number {
+   const raw = process.env[name];
+   if (!raw) return fallback;
+@@ -42,4 +51,15 @@
+     .split(',')
+     .map((term) => term.trim())
+     .filter(Boolean),
++  redditScraperEnabled: envBoolean('REDDIT_SCRAPER_ENABLED', true),
++  redditScrapeMs: envNumber('REDDIT_SCRAPE_MS', 300_000),
++  redditScrapeTimeoutMs: envNumber('REDDIT_SCRAPE_TIMEOUT_MS', 120_000),
++  redditSearchLimit: envNumber('REDDIT_SEARCH_LIMIT', 25),
++  redditSubreddits: process.env.REDDIT_SUBREDDITS || 'all',
++  redditClientId: process.env.REDDIT_CLIENT_ID || '',
++  redditClientSecret: process.env.REDDIT_CLIENT_SECRET || '',
++  redditUserAgent: process.env.REDDIT_USER_AGENT || 'memepulse-reddit-scanner/1.0',
++  redditPythonBin: process.env.PYTHON_BIN || 'python3',
++  redditDbPath: process.env.REDDIT_DB_PATH || 'server/data/reddit-publicity.sqlite',
++  redditManifestPath: process.env.REDDIT_MANIFEST_PATH || 'server/data/tracked-coins.json',
+ } as const;
+Only in /mnt/data/workrepo/MemeCoin-Google-AI-main/server: data
+diff -ru /mnt/data/basecompare/MemeCoin-Google-AI-main/server/index.ts /mnt/data/workrepo/MemeCoin-Google-AI-main/server/index.ts
+--- /mnt/data/basecompare/MemeCoin-Google-AI-main/server/index.ts	2026-02-28 17:07:18.000000000 +0000
++++ /mnt/data/workrepo/MemeCoin-Google-AI-main/server/index.ts	2026-02-28 18:38:02.210026764 +0000
+@@ -1,9 +1,20 @@
+ import express from 'express';
+ import { appConfig } from './config';
++import { RedditPublicityManager } from './publicity';
+ import { UniverseManager } from './universe';
+ 
+ const app = express();
+ const manager = new UniverseManager();
++const publicityManager = new RedditPublicityManager();
++
++function getTrackedCoinManifest() {
++  return manager.getSnapshot().items.map((coin) => ({
++    coinId: coin.tokenAddress,
++    symbol: coin.symbol,
++    name: coin.name,
++    contractAddress: coin.tokenAddress,
++  }));
++}
+ 
+ app.get('/api/health', (_req, res) => {
+   res.json({
+@@ -11,15 +22,20 @@
+     service: 'memepulse-live-universe',
+     chainId: appConfig.chainId,
+     now: new Date().toISOString(),
++    reddit: publicityManager.getStatus(),
+   });
+ });
+ 
+ app.get('/api/live-universe', (_req, res) => {
+-  res.json(manager.getSnapshot());
++  res.json(publicityManager.attachToSnapshot(manager.getSnapshot()));
++});
++
++app.get('/api/publicity-snapshot', (_req, res) => {
++  res.json(publicityManager.getPublicitySnapshot(manager.getSnapshot()));
+ });
+ 
+ app.get('/api/debug/candidates', (_req, res) => {
+-  const snapshot = manager.getSnapshot();
++  const snapshot = publicityManager.attachToSnapshot(manager.getSnapshot());
+   res.json({
+     status: snapshot.status,
+     counts: snapshot.counts,
+@@ -30,6 +46,7 @@
+ async function bootstrap() {
+   await manager.initialize();
+   manager.start();
++  publicityManager.start(getTrackedCoinManifest);
+ 
+   app.listen(appConfig.port, '0.0.0.0', () => {
+     console.log(
+Only in /mnt/data/workrepo/MemeCoin-Google-AI-main/server: publicity.ts
+Only in /mnt/data/workrepo/MemeCoin-Google-AI-main/server: reddit_schema.sql
+Only in /mnt/data/workrepo/MemeCoin-Google-AI-main/server: reddit_scraper.py
+diff -ru /mnt/data/basecompare/MemeCoin-Google-AI-main/server/types.ts /mnt/data/workrepo/MemeCoin-Google-AI-main/server/types.ts
+--- /mnt/data/basecompare/MemeCoin-Google-AI-main/server/types.ts	2026-02-28 17:46:34.000000000 +0000
++++ /mnt/data/workrepo/MemeCoin-Google-AI-main/server/types.ts	2026-02-28 18:32:50.096794923 +0000
+@@ -82,6 +82,11 @@
+   ageMinutes: number;
+   pairCreatedAt: number;
+   updatedAt: number;
++  publicityScore?: number;
++  publicity_score?: number;
++  sentimentConsensus?: string | null;
++  sentiment_consensus?: string | null;
++  redditPostCount?: number;
+ }
+ 
+ export interface UniverseSnapshot {
